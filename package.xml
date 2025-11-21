@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>multi_cloud_fusion</name>
+  <version>0.0.1</version>
+  <description>Fuse multiple point clouds and project fused cloud to top-view images.</description>
+
+  <maintainer email="mohamedashraf123@gmail.com">Mohamed Abdelkader</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_sensor_msgs</depend>
+  <depend>message_filters</depend>
+  <depend>pcl_conversions</depend>
+  <depend>geometry_msgs</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

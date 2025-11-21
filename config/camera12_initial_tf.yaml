@@ -1,0 +1,4 @@
+parent_frame: morpho_conveyor/right_camera/link/realsense_d435
+child_frame: morpho_conveyor/left_camera/link/realsense_d435
+translation: [0.8, 5.38469e-09, 1.29904]
+rotation: [0.866025, 0, -0.5, 1.7949e-09]
