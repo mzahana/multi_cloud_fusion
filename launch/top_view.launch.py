@@ -85,7 +85,7 @@ def generate_launch_description():
         # ---- New filter args ----
         DeclareLaunchArgument(
             'use_hole_filling',
-            default_value='false',
+            default_value='true',
             description='Enable simple 2D hole filling on RGB/depth',
         ),
         DeclareLaunchArgument(
@@ -114,6 +114,7 @@ def generate_launch_description():
                 ('cloud', '/fused_cloud'),          # from fusion node
                 ('top_view/rgb', '/top_view/rgb'),
                 ('top_view/depth', '/top_view/depth'),
+                ('/top_view/index_map', '/top_view/index_map'),
             ],
             parameters=[
                 {'use_sim_time': use_sim_time},

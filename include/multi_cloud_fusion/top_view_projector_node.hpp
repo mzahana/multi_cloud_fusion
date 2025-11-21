@@ -5,7 +5,6 @@
 #include <mutex>
 #include <cstdint>
 
-
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include "sensor_msgs/msg/image.hpp"
@@ -50,6 +49,8 @@ private:
   rclcpp::Subscription<CloudMsg>::SharedPtr cloud_sub_;
   rclcpp::Publisher<ImageMsg>::SharedPtr rgb_pub_;
   rclcpp::Publisher<ImageMsg>::SharedPtr depth_pub_;
+  // NEW: index map publisher (32SC1, per-pixel index into original cloud)
+  rclcpp::Publisher<ImageMsg>::SharedPtr index_pub_;
 
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_callback_handle_;
 

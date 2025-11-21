@@ -3,6 +3,7 @@
 #include <limits>
 #include <cmath>
 #include <algorithm>
+#include <vector>
 
 #include "pcl_conversions/pcl_conversions.h"
 
@@ -24,7 +25,7 @@ TopViewProjectorNode::TopViewProjectorNode(const rclcpp::NodeOptions & options)
   bg_g_ = static_cast<uint8_t>(this->declare_parameter<int>("bg_g", 0));
   bg_b_ = static_cast<uint8_t>(this->declare_parameter<int>("bg_b", 0));
 
-  // NEW: image-level filters
+  // image-level filters
   use_hole_filling_        = this->declare_parameter<bool>("use_hole_filling", false);
   hole_filling_iterations_ = this->declare_parameter<int>("hole_filling_iterations", 1);
 
@@ -48,8 +49,10 @@ TopViewProjectorNode::TopViewProjectorNode(const rclcpp::NodeOptions & options)
     use_smoothing_ ? "true" : "false", smoothing_kernel_size_);
 
   // -------- Publishers (topics can be remapped) --------
-  rgb_pub_ = this->create_publisher<ImageMsg>("top_view/rgb", rclcpp::SensorDataQoS());
+  rgb_pub_   = this->create_publisher<ImageMsg>("top_view/rgb",   rclcpp::SensorDataQoS());
   depth_pub_ = this->create_publisher<ImageMsg>("top_view/depth", rclcpp::SensorDataQoS());
+  // NEW: index map publisher; each pixel stores index into original cloud.points
+  index_pub_ = this->create_publisher<ImageMsg>("top_view/index_map", rclcpp::SensorDataQoS());
 
   // -------- Subscriber (input cloud) --------
   cloud_sub_ = this->create_subscription<CloudMsg>(
@@ -165,13 +168,14 @@ rcl_interfaces::msg::SetParametersResult TopViewProjectorNode::onParameterChange
 }
 
 // ============================================================================
-// Cloud callback: project fused cloud to top-view RGB + depth
+// Cloud callback: project fused cloud to top-view RGB + depth + index map
 // ============================================================================
 void TopViewProjectorNode::cloudCallback(const CloudMsg::ConstSharedPtr & cloud_msg)
 {
   // Early exit if nobody is listening
   if (rgb_pub_->get_subscription_count() == 0 &&
-      depth_pub_->get_subscription_count() == 0) {
+      depth_pub_->get_subscription_count() == 0 &&
+      index_pub_->get_subscription_count() == 0) {
     return;
   }
 
@@ -229,9 +233,9 @@ void TopViewProjectorNode::cloudCallback(const CloudMsg::ConstSharedPtr & cloud_
   for (int v = 0; v < image_height; ++v) {
     for (int u = 0; u < image_width; ++u) {
       size_t idx = static_cast<size_t>(v * rgb_img.step + u * 3);
-      rgb_img.data[idx + 0] = bg_r;
-      rgb_img.data[idx + 1] = bg_g;
-      rgb_img.data[idx + 2] = bg_b;
+      rgb_img.data[idx + 0] = bg_r_;
+      rgb_img.data[idx + 1] = bg_g_;
+      rgb_img.data[idx + 2] = bg_b_;
     }
   }
 
@@ -245,11 +249,16 @@ void TopViewProjectorNode::cloudCallback(const CloudMsg::ConstSharedPtr & cloud_
 
   std::fill(depth_buffer.begin(), depth_buffer.end(), init_val);
 
+  // NEW: index buffer: per-pixel index into original cloud.points, -1 = no point
+  std::vector<int32_t> index_buffer(n_pixels, -1);
+
   // Project points
   const double x_range = x_max - x_min;
   const double y_range = y_max - y_min;
 
-  for (const auto & pt : cloud.points) {
+  for (std::size_t i = 0; i < cloud.points.size(); ++i) {
+    const auto & pt = cloud.points[i];
+
     double x = pt.x;
     double y = pt.y;
     float  z = pt.z;
@@ -264,7 +273,7 @@ void TopViewProjectorNode::cloudCallback(const CloudMsg::ConstSharedPtr & cloud_
 
     // Map to pixel indices
     double u_f = (x - x_min) / x_range * (image_width - 1);
-    double v_f = (y_max - y) / y_range * (image_height - 1);  // flip y for image coordinates
+    double v_f = (y_max - y) / y_range * (image_height - 1);  // flip y for image coords
 
     int u = static_cast<int>(std::round(u_f));
     int v = static_cast<int>(std::round(v_f));
@@ -292,8 +301,9 @@ void TopViewProjectorNode::cloudCallback(const CloudMsg::ConstSharedPtr & cloud_
     }
 
     depth_buffer[idx] = z;
+    index_buffer[idx] = static_cast<int32_t>(i);  // <--- store point index
 
-    // Update RGB image pixel
+    // Update RGB image pixel with original point color
     size_t rgb_idx = static_cast<size_t>(v * rgb_img.step + u * 3);
     rgb_img.data[rgb_idx + 0] = pt.r;
     rgb_img.data[rgb_idx + 1] = pt.g;
@@ -354,6 +364,8 @@ void TopViewProjectorNode::cloudCallback(const CloudMsg::ConstSharedPtr & cloud_
             rgb_next[rgb_idx + 0] = static_cast<uint8_t>(sum_r / count);
             rgb_next[rgb_idx + 1] = static_cast<uint8_t>(sum_g / count);
             rgb_next[rgb_idx + 2] = static_cast<uint8_t>(sum_b / count);
+            // NOTE: we deliberately do NOT assign an index here:
+            // these are filled pixels with no direct point in the original cloud.
           }
         }
       }
@@ -412,6 +424,7 @@ void TopViewProjectorNode::cloudCallback(const CloudMsg::ConstSharedPtr & cloud_
           rgb_smoothed[rgb_idx + 0] = static_cast<uint8_t>(sum_r / count);
           rgb_smoothed[rgb_idx + 1] = static_cast<uint8_t>(sum_g / count);
           rgb_smoothed[rgb_idx + 2] = static_cast<uint8_t>(sum_b / count);
+          // index_buffer stays as is: smoothing doesn't change which point is "responsible"
         }
       }
     }
@@ -441,8 +454,24 @@ void TopViewProjectorNode::cloudCallback(const CloudMsg::ConstSharedPtr & cloud_
     }
   }
 
+  // NEW: Prepare index map image (32SC1) from index_buffer
+  ImageMsg index_img;
+  index_img.header = cloud_msg->header;
+  index_img.height = static_cast<uint32_t>(image_height);
+  index_img.width  = static_cast<uint32_t>(image_width);
+  index_img.encoding = "32SC1";
+  index_img.is_bigendian = false;
+  index_img.step = image_width * sizeof(int32_t);
+  index_img.data.resize(index_img.height * index_img.step);
+
+  auto * index_ptr = reinterpret_cast<int32_t*>(index_img.data.data());
+  for (size_t idx = 0; idx < n_pixels; ++idx) {
+    index_ptr[idx] = index_buffer[idx]; // -1 for background/holes/filled pixels
+  }
+
   rgb_pub_->publish(rgb_img);
   depth_pub_->publish(depth_img);
+  index_pub_->publish(index_img);
 
   RCLCPP_DEBUG_THROTTLE(
     this->get_logger(), *this->get_clock(), 1000,
