@@ -1,3 +1,4 @@
+// @file cloud_fusion_node.cpp
 #include "multi_cloud_fusion/cloud_fusion_node.hpp"
 
 #include <functional>
