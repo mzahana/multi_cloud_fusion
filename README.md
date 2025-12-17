@@ -1,6 +1,3 @@
-Here is the complete updated `README.md`. I have updated the `cloud_fusion_node` section to reflect the high-performance "Ultra Fast" implementation (OpenMP, raw buffer processing, removal of filters) and updated the relevant usage examples. The details for the other nodes remain unchanged.
-
-
 # multi_cloud_fusion
 
 A ROS 2 package for fusing multiple point clouds from different sensors and projecting the result into top-view RGB and depth images.
