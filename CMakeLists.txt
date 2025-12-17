@@ -19,6 +19,7 @@ find_package(message_filters REQUIRED)
 find_package(pcl_conversions REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(PCL REQUIRED COMPONENTS common filters registration)
+find_package(OpenMP REQUIRED)
 
 # Include directories
 include_directories(
@@ -46,6 +47,7 @@ ament_target_dependencies(cloud_fusion_node_lib
 
 target_link_libraries(cloud_fusion_node_lib
   ${PCL_LIBRARIES}
+  OpenMP::OpenMP_CXX
 )
 
 add_executable(cloud_fusion_node
@@ -74,6 +76,7 @@ ament_target_dependencies(top_view_projector_node_lib
 
 target_link_libraries(top_view_projector_node_lib
   ${PCL_LIBRARIES}
+  OpenMP::OpenMP_CXX
 )
 
 add_executable(top_view_projector_node

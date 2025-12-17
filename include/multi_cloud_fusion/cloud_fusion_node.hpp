@@ -16,6 +16,8 @@
 #include "message_filters/synchronizer.h"
 #include "message_filters/sync_policies/approximate_time.h"
 
+#include <chrono>
+
 class CloudFusionNode : public rclcpp::Node
 {
 public:
@@ -76,4 +78,7 @@ private:
 
   // ------------- Mutex for shared state -------------
   std::mutex state_mutex_;
+
+  // To track syncing timing
+  rclcpp::Time last_callback_time_;
 };

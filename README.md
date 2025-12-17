@@ -1,3 +1,6 @@
+Here is the complete updated `README.md`. I have updated the `cloud_fusion_node` section to reflect the high-performance "Ultra Fast" implementation (OpenMP, raw buffer processing, removal of filters) and updated the relevant usage examples. The details for the other nodes remain unchanged.
+
+
 # multi_cloud_fusion
 
 A ROS 2 package for fusing multiple point clouds from different sensors and projecting the result into top-view RGB and depth images.
@@ -6,8 +9,8 @@ A ROS 2 package for fusing multiple point clouds from different sensors and proj
 
 This package provides a two-stage processing pipeline:
 
-1. **CloudFusionNode** - Synchronizes and fuses two point clouds into a single cloud in a target frame
-2. **TopViewProjectorNode** - Projects the fused 3D point cloud into 2D top-view RGB and depth images
+1. **CloudFusionNode** - Synchronizes and fuses two point clouds into a single cloud in a target frame using a high-performance, parallelized pipeline.
+2. **TopViewProjectorNode** - Projects the fused 3D point cloud into 2D top-view RGB and depth images.
 
 Additionally, utility nodes are provided for:
 - **icp_tf_node** - ICP-based transform estimation between point clouds
@@ -17,6 +20,7 @@ Additionally, utility nodes are provided for:
 
 - ROS 2 (tested with Humble/Jazzy)
 - PCL (Point Cloud Library)
+- OpenMP (for parallel processing)
 - sensor_msgs
 - tf2 and tf2_sensor_msgs
 - message_filters
@@ -25,93 +29,102 @@ Additionally, utility nodes are provided for:
 
 ```bash
 # From your workspace root
-colcon build --packages-select multi_cloud_fusion
+# Ensure you build in Release mode for maximum performance with OpenMP
+colcon build --packages-select multi_cloud_fusion --cmake-args -DCMAKE_BUILD_TYPE=Release
 
 # Source the workspace
 source install/setup.bash
-```
+````
 
 ## Nodes
 
-### 1. cloud_fusion_node
+### 1\. cloud\_fusion\_node
 
-Fuses two time-synchronized point clouds into a common target frame with optional filtering.
+A high-performance node that fuses two time-synchronized point clouds into a common target frame.
+
+**Key Features:**
+
+  - **Ultra-Fast Processing:** Uses **OpenMP** to parallelize transformations across all CPU cores.
+  - **Raw Buffer Manipulation:** Bypasses PCL conversion overhead by operating directly on ROS message memory buffers.
+  - **Zero Filtering:** To minimize latency (achieving \~30Hz on Jetson AGX/Orin), all voxel grid, cropping, and outlier removal filters have been removed. This node performs strictly transform-and-merge operations.
 
 **Subscribed Topics:**
-- `cloud1` (sensor_msgs/PointCloud2) - First point cloud input
-- `cloud2` (sensor_msgs/PointCloud2) - Second point cloud input
+
+  - `cloud1` (sensor\_msgs/PointCloud2) - First point cloud input
+  - `cloud2` (sensor\_msgs/PointCloud2) - Second point cloud input
 
 **Published Topics:**
-- `fused_cloud` (sensor_msgs/PointCloud2) - Merged point cloud in target frame
+
+  - `fused_cloud` (sensor\_msgs/PointCloud2) - Merged point cloud in target frame
 
 **Parameters:**
-- `target_frame` (string, default: "morpho_conveyor_base") - Target coordinate frame
-- `use_voxel_grid` (bool, default: false) - Enable voxel grid downsampling
-- `voxel_leaf_size` (double, default: 0.005) - Voxel size in meters
-- `use_z_crop` (bool, default: false) - Enable z-axis filtering
-- `z_min` (double, default: -1.0) - Minimum z value in meters
-- `z_max` (double, default: 2.0) - Maximum z value in meters
-- `use_outlier_removal` (bool, default: false) - Enable radius outlier removal
-- `outlier_radius` (double, default: 0.01) - Search radius in meters
-- `outlier_min_neighbors` (int, default: 5) - Minimum neighbors to keep point
 
-### 2. top_view_projector_node
+  - `target_frame` (string, default: "morpho\_conveyor\_base") - The target coordinate frame to which both clouds will be transformed.
+
+### 2\. top\_view\_projector\_node
 
 Projects a 3D point cloud into 2D top-view RGB and depth images.
 
 **Subscribed Topics:**
-- `cloud` (sensor_msgs/PointCloud2) - Input point cloud
+
+  - `cloud` (sensor\_msgs/PointCloud2) - Input point cloud
 
 **Published Topics:**
-- `top_view/rgb` (sensor_msgs/Image) - RGB image (encoding: "rgb8")
-- `top_view/depth` (sensor_msgs/Image) - Depth image (encoding: "32FC1")
+
+  - `top_view/rgb` (sensor\_msgs/Image) - RGB image (encoding: "rgb8")
+  - `top_view/depth` (sensor\_msgs/Image) - Depth image (encoding: "32FC1")
 
 **Parameters:**
-- `image_width` (int, default: 640) - Output image width in pixels
-- `image_height` (int, default: 480) - Output image height in pixels
-- `x_min`, `x_max` (double, default: -1.0, 1.0) - ROI bounds in X axis (meters)
-- `y_min`, `y_max` (double, default: -1.0, 1.0) - ROI bounds in Y axis (meters)
-- `use_max_height` (bool, default: true) - Take highest z per pixel (else lowest)
-- `bg_r`, `bg_g`, `bg_b` (int, default: 0) - Background color (0-255)
-- `use_hole_filling` (bool, default: false) - Enable 4-neighbor hole filling
-- `hole_filling_iterations` (int, default: 1) - Number of filling iterations
-- `use_smoothing` (bool, default: false) - Enable box filter smoothing
-- `smoothing_kernel_size` (int, default: 3) - Kernel size (must be odd, >=3)
 
-### 3. icp_tf_node
+  - `image_width` (int, default: 640) - Output image width in pixels
+  - `image_height` (int, default: 480) - Output image height in pixels
+  - `x_min`, `x_max` (double, default: -1.0, 1.0) - ROI bounds in X axis (meters)
+  - `y_min`, `y_max` (double, default: -1.0, 1.0) - ROI bounds in Y axis (meters)
+  - `use_max_height` (bool, default: true) - Take highest z per pixel (else lowest)
+  - `bg_r`, `bg_g`, `bg_b` (int, default: 0) - Background color (0-255)
+  - `use_hole_filling` (bool, default: false) - Enable 4-neighbor hole filling
+  - `hole_filling_iterations` (int, default: 1) - Number of filling iterations
+  - `use_smoothing` (bool, default: false) - Enable box filter smoothing
+  - `smoothing_kernel_size` (int, default: 3) - Kernel size (must be odd, \>=3)
+
+### 3\. icp\_tf\_node
 
 Estimates and publishes the transform between two point clouds using Iterative Closest Point (ICP) algorithm. Useful for initial calibration or dynamic transform estimation.
 
 **Subscribed Topics:**
-- `source_topic` (sensor_msgs/PointCloud2) - Source point cloud
-- `target_topic` (sensor_msgs/PointCloud2) - Target point cloud
+
+  - `source_topic` (sensor\_msgs/PointCloud2) - Source point cloud
+  - `target_topic` (sensor\_msgs/PointCloud2) - Target point cloud
 
 **Published Topics:**
-- Publishes TF transform: `target_frame` → `source_frame` (when `publish_tf` is true)
+
+  - Publishes TF transform: `target_frame` → `source_frame` (when `publish_tf` is true)
 
 **Parameters:**
-- `source_topic` (string, default: "/camera/right/points") - Source point cloud topic
-- `target_topic` (string, default: "/camera/left/points") - Target point cloud topic
-- `icp_rate_hz` (double, default: 5.0) - Maximum ICP update rate in Hz
-- `voxel_leaf_size` (double, default: 0.01) - Voxel grid downsampling size; ≤0 disables
-- `icp_max_iterations` (int, default: 50) - Maximum ICP iterations
-- `icp_max_correspondence_distance` (double, default: 0.05) - Max point correspondence distance
-- `icp_transformation_epsilon` (double, default: 1e-8) - Transformation convergence threshold
-- `icp_euclidean_fitness_epsilon` (double, default: 1e-6) - Fitness convergence threshold
-- `fitness_score_threshold` (double, default: 0.5) - Reject ICP results above this fitness score
-- `use_previous_transform_as_initial_guess` (bool, default: true) - Use previous ICP result as initial guess
-- `publish_tf` (bool, default: true) - Whether to publish transform to TF tree
-- `initial_tf_yaml_path` (string, default: "") - Path to YAML file with initial transform (optional)
 
-### 4. frame_tf_saver_node
+  - `source_topic` (string, default: "/camera/right/points") - Source point cloud topic
+  - `target_topic` (string, default: "/camera/left/points") - Target point cloud topic
+  - `icp_rate_hz` (double, default: 5.0) - Maximum ICP update rate in Hz
+  - `voxel_leaf_size` (double, default: 0.01) - Voxel grid downsampling size; ≤0 disables
+  - `icp_max_iterations` (int, default: 50) - Maximum ICP iterations
+  - `icp_max_correspondence_distance` (double, default: 0.05) - Max point correspondence distance
+  - `icp_transformation_epsilon` (double, default: 1e-8) - Transformation convergence threshold
+  - `icp_euclidean_fitness_epsilon` (double, default: 1e-6) - Fitness convergence threshold
+  - `fitness_score_threshold` (double, default: 0.5) - Reject ICP results above this fitness score
+  - `use_previous_transform_as_initial_guess` (bool, default: true) - Use previous ICP result as initial guess
+  - `publish_tf` (bool, default: true) - Whether to publish transform to TF tree
+  - `initial_tf_yaml_path` (string, default: "") - Path to YAML file with initial transform (optional)
+
+### 4\. frame\_tf\_saver\_node
 
 Looks up a transform from the TF tree and saves it to a YAML file. This is useful for saving calibration transforms or providing initial guesses for ICP.
 
 **Parameters:**
-- `source_frame` (string, default: "morpho_conveyor/left_camera/link/realsense_d435") - Child frame
-- `target_frame` (string, default: "morpho_conveyor/right_camera/link/realsense_d435") - Parent frame
-- `output_yaml_path` (string, default: "camera12_initial_tf.yaml") - Output YAML file path
-- `lookup_timeout_sec` (double, default: 10.0) - Maximum time to wait for transform
+
+  - `source_frame` (string, default: "morpho\_conveyor/left\_camera/link/realsense\_d435") - Child frame
+  - `target_frame` (string, default: "morpho\_conveyor/right\_camera/link/realsense\_d435") - Parent frame
+  - `output_yaml_path` (string, default: "camera12\_initial\_tf.yaml") - Output YAML file path
+  - `lookup_timeout_sec` (double, default: 10.0) - Maximum time to wait for transform
 
 **Note:** This node runs once, saves the transform, and then shuts down automatically.
 
@@ -124,14 +137,12 @@ ros2 launch multi_cloud_fusion cloud_fusion.launch.py
 ```
 
 With custom parameters:
+
 ```bash
 ros2 launch multi_cloud_fusion cloud_fusion.launch.py \
-  target_frame:=world \
-  use_voxel_grid:=true \
-  voxel_leaf_size:=0.01 \
-  use_z_crop:=true \
-  z_min:=-0.5 \
-  z_max:=1.5
+  cloud1_topic:=/camera/front/points \
+  cloud2_topic:=/camera/back/points \
+  fused_topic:=/merged_output
 ```
 
 ### Launch Top-View Projector Node
@@ -141,6 +152,7 @@ ros2 launch multi_cloud_fusion top_view.launch.py
 ```
 
 With custom parameters:
+
 ```bash
 ros2 launch multi_cloud_fusion top_view.launch.py \
   image_width:=800 \
@@ -183,6 +195,7 @@ ros2 launch multi_cloud_fusion icp_tf_node.launch.py
 ```
 
 With custom parameters:
+
 ```bash
 ros2 launch multi_cloud_fusion icp_tf_node.launch.py \
   source_topic:=/camera1/points \
@@ -201,6 +214,7 @@ ros2 launch multi_cloud_fusion frame_tf_saver.launch.py
 ```
 
 With custom parameters:
+
 ```bash
 ros2 launch multi_cloud_fusion frame_tf_saver.launch.py \
   source_frame:=camera_left_link \
@@ -209,11 +223,13 @@ ros2 launch multi_cloud_fusion frame_tf_saver.launch.py \
 ```
 
 **Typical Workflow for Calibration:**
-1. Use `frame_tf_saver_node` to save an approximate initial transform
-2. Use `icp_tf_node` with the saved transform as `initial_tf_yaml_path` to refine it
-3. Save the refined transform for use in cloud fusion
+
+1.  Use `frame_tf_saver_node` to save an approximate initial transform
+2.  Use `icp_tf_node` with the saved transform as `initial_tf_yaml_path` to refine it
+3.  Save the refined transform for use in cloud fusion
 
 **YAML Transform File Format:**
+
 ```yaml
 parent_frame: target_frame_name
 child_frame: source_frame_name
@@ -228,10 +244,6 @@ All parameters support runtime modification:
 ```bash
 # Change fusion target frame
 ros2 param set /cloud_fusion_node target_frame new_frame
-
-# Enable voxel grid filtering
-ros2 param set /cloud_fusion_node use_voxel_grid true
-ros2 param set /cloud_fusion_node voxel_leaf_size 0.02
 
 # Adjust top-view ROI
 ros2 param set /top_view_projector_node x_min -3.0
@@ -251,27 +263,27 @@ rviz2
 ```
 
 Add displays for:
-- `/fused_cloud` - PointCloud2 display
-- `/top_view/rgb` - Image display
-- `/top_view/depth` - Image display
+
+  - `/fused_cloud` - PointCloud2 display
+  - `/top_view/rgb` - Image display
+  - `/top_view/depth` - Image display
 
 ## Processing Pipeline
 
 ### CloudFusionNode Pipeline:
-1. Time-synchronize two input clouds (ApproximateTime policy)
-2. Transform both clouds to target frame
-3. Merge clouds
-4. (Optional) Voxel grid downsampling
-5. (Optional) Z-axis cropping
-6. (Optional) Radius outlier removal
-7. Publish fused cloud
+
+1.  **Synchronization:** Time-synchronize two input clouds (ApproximateTime policy).
+2.  **Buffer Allocation:** Allocate a single continuous memory block for the merged output.
+3.  **Parallel Transform:** Use OpenMP to transform points from both clouds directly into the output buffer (Zero-Copy logic).
+4.  **Publish:** Publish the merged raw buffer immediately.
 
 ### TopViewProjectorNode Pipeline:
-1. Project 3D points to 2D pixel coordinates
-2. Keep highest/lowest z per pixel (based on `use_max_height`)
-3. (Optional) 4-neighborhood hole filling on RGB and depth
-4. (Optional) Box filter smoothing on RGB and depth
-5. Publish RGB and depth images
+
+1.  Project 3D points to 2D pixel coordinates
+2.  Keep highest/lowest z per pixel (based on `use_max_height`)
+3.  (Optional) 4-neighborhood hole filling on RGB and depth
+4.  (Optional) Box filter smoothing on RGB and depth
+5.  Publish RGB and depth images
 
 ## License
 

@@ -5,7 +5,15 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    # ---- Launch arguments ----
+    # ---- Launch arguments (Configurations) ----
+    
+    # Topic Remapping Configurations
+    input_cloud_topic = LaunchConfiguration('input_cloud_topic')
+    output_rgb_topic = LaunchConfiguration('output_rgb_topic')
+    output_depth_topic = LaunchConfiguration('output_depth_topic')
+    output_index_map_topic = LaunchConfiguration('output_index_map_topic')
+
+    # General Configurations
     use_sim_time = LaunchConfiguration('use_sim_time')
     image_width = LaunchConfiguration('image_width')
     image_height = LaunchConfiguration('image_height')
@@ -18,13 +26,35 @@ def generate_launch_description():
     bg_g = LaunchConfiguration('bg_g')
     bg_b = LaunchConfiguration('bg_b')
 
-    # New filter-related args
+    # Filter-related Configurations
     use_hole_filling = LaunchConfiguration('use_hole_filling')
     hole_filling_iterations = LaunchConfiguration('hole_filling_iterations')
     use_smoothing = LaunchConfiguration('use_smoothing')
     smoothing_kernel_size = LaunchConfiguration('smoothing_kernel_size')
 
     return LaunchDescription([
+        # ---- Topic Arguments ----
+        DeclareLaunchArgument(
+            'input_cloud_topic',
+            default_value='/fused_cloud',
+            description='Input PointCloud2 topic to project',
+        ),
+        DeclareLaunchArgument(
+            'output_rgb_topic',
+            default_value='/top_view/rgb',
+            description='Topic name for the output RGB top-view image',
+        ),
+        DeclareLaunchArgument(
+            'output_depth_topic',
+            default_value='/top_view/depth',
+            description='Topic name for the output Depth top-view image',
+        ),
+        DeclareLaunchArgument(
+            'output_index_map_topic',
+            default_value='/top_view/index_map',
+            description='Topic name for the output Index Map',
+        ),
+
         # ---- Generic args ----
         DeclareLaunchArgument(
             'use_sim_time',
@@ -82,7 +112,7 @@ def generate_launch_description():
             description='Background B channel (0-255)',
         ),
 
-        # ---- New filter args ----
+        # ---- Filter args ----
         DeclareLaunchArgument(
             'use_hole_filling',
             default_value='true',
@@ -111,10 +141,10 @@ def generate_launch_description():
             name='top_view_projector_node',
             output='screen',
             remappings=[
-                ('cloud', '/fused_cloud'),          # from fusion node
-                ('top_view/rgb', '/top_view/rgb'),
-                ('top_view/depth', '/top_view/depth'),
-                ('/top_view/index_map', '/top_view/index_map'),
+                ('cloud', input_cloud_topic),
+                ('top_view/rgb', output_rgb_topic),
+                ('top_view/depth', output_depth_topic),
+                ('/top_view/index_map', output_index_map_topic),
             ],
             parameters=[
                 {'use_sim_time': use_sim_time},
